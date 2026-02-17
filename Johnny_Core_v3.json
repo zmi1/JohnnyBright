@@ -1,0 +1,672 @@
+{
+  "name": "Johnny_Core_v3",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "everyMinute"
+      },
+      "id": "6a1f2c8d-4e9b-11ec-81d3-0242ac130003",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "query": "SELECT * FROM get_next_pending_task((SELECT id FROM projects WHERE name='Johnny Bright'));",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": "e5OQkBV17S58WLzA"
+      },
+      "id": "7b2f3d9e-5f0c-12fd-92e4-1353bd241114",
+      "name": "Get Pending Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "dotNotation": false,
+        "options": {},
+        "assignments": [
+          {
+            "name": "id",
+            "value": "={{ $json.id }}"
+          },
+          {
+            "name": "description",
+            "value": "={{ $json.description }}"
+          },
+          {
+            "name": "topic_id",
+            "value": "={{ $json.topic_id }}"
+          },
+          {
+            "name": "source",
+            "value": "={{ $json.source }}"
+          }
+        ]
+      },
+      "id": "8c3g4e0f-6g1d-23ge-03f5-2464ce352225",
+      "name": "Remember Task Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "comparator": "exists",
+              "key": "id",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "id": "9d4h5f1g-7h2e-34hf-14g6-3575df463336",
+      "name": "Task Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "query": "UPDATE project_tasks SET status = 'in_progress', started_at = NOW() WHERE id = $1;",
+        "queryParams": "={{ [$('Remember Task Data').item.json.id] }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": "e5OQkBV17S58WLzA"
+      },
+      "id": "0e5i6g2h-8i3f-45ig-25h7-4686eg574447",
+      "name": "Mark In Progress",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const taskData = $('Remember Task Data').item.json;\nconst prevCritic = $input.first().json.critic_comment || '';\nconst revisions = $input.first().json.revisions || 0;\n\nlet prompt = `Task:\\n${taskData.description}`;\nif (prevCritic) {\n  prompt += `\\n\\nPrevious Critic Feedback (revision ${revisions}):\\n${prevCritic}\\n\\nPlease address the feedback above.`;\n}\n\nreturn [{\n  json: {\n    prompt: prompt,\n    description: taskData.description,\n    revisions: revisions,\n    critic_comment: prevCritic\n  }\n}];"
+      },
+      "id": "1f6j7h3i-9j4g-56jh-36i8-5797fh685558",
+      "name": "Prepare LLM Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/v1/chat/completions",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "default"
+            },
+            {
+              "name": "messages",
+              "value": "[{\"role\": \"system\", \"content\": \"You are Johnny Bright, an autonomous AI agent. Execute tasks thoroughly and professionally. Provide complete, actionable results. Always think step by step.\"}, {\"role\": \"user\", \"content\": \"{{ $json.prompt }}\"}]"
+            },
+            {
+              "name": "temperature",
+              "value": "0.4"
+            },
+            {
+              "name": "max_tokens",
+              "value": "2048"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2g7k8i4j-0k5h-67ki-47j9-6808gi796669",
+      "name": "Execute Task (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst prevData = $('Prepare LLM Input').first().json;\n\nconst output = response.choices[0].message.content;\nconst usage = response.usage || {};\n\nreturn [{\n  json: {\n    execution_output: output,\n    input_tokens: usage.prompt_tokens || 0,\n    output_tokens: usage.completion_tokens || 0,\n    total_tokens: usage.total_tokens || 0,\n    revisions: prevData.revisions,\n    description: prevData.description,\n    critic_comment: prevData.critic_comment\n  }\n}];"
+      },
+      "id": "3h8l9j5k-1l6i-78lj-58k0-7919hj807770",
+      "name": "Extract Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "query": "INSERT INTO execution_log (task_id, revision_number, llm_output, input_tokens, output_tokens, total_tokens, temperature) VALUES ($1, $2, $3, $4, $5, $6, 0.4);",
+        "queryParams": "={{ [$('Remember Task Data').item.json.id, $json.revisions, $json.execution_output, $json.input_tokens, $json.output_tokens, $json.total_tokens] }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": "e5OQkBV17S58WLzA"
+      },
+      "id": "4i9m0k6l-2m7j-89mk-69l1-8a20ik918881",
+      "name": "Save Execution Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "query": "UPDATE project_tasks SET total_tokens = total_tokens + $1 WHERE id = $2;",
+        "queryParams": "={{ [$json.total_tokens, $('Remember Task Data').item.json.id] }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": "e5OQkBV17S58WLzA"
+      },
+      "id": "5j0n1l7m-3n8k-90nl-70m2-9b31jl029992",
+      "name": "Track Tokens",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/v1/chat/completions",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "default"
+            },
+            {
+              "name": "messages",
+              "value": "[{\"role\": \"system\", \"content\": \"You are a strict quality reviewer. Evaluate the following task output. Return ONLY valid JSON with no additional text: {\\\"verdict\\\": \\\"approve\\\" or \\\"revise\\\", \\\"comment\\\": \\\"your feedback\\\"}. Approve if the output is complete, correct, and actionable. Revise if it's incomplete, incorrect, or low quality.\"}, {\"role\": \"user\", \"content\": \"Original Task:\\n{{ $json.description }}\\n\\nTask Output:\\n{{ $json.execution_output }}\"}]"
+            },
+            {
+              "name": "temperature",
+              "value": "0.1"
+            },
+            {
+              "name": "max_tokens",
+              "value": "500"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6k1o2m8n-4o9l-01om-81n3-0c42km130a03",
+      "name": "Critic Review (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nconst prevData = $('Extract Result').first().json;\n\nlet parsed;\ntry {\n  // Try to extract JSON even if wrapped in markdown\n  const jsonMatch = raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);\n} catch (e) {\n  // If parsing fails, auto-approve to avoid blocking\n  parsed = { verdict: 'approve', comment: 'Auto-approved: critic response was not valid JSON.' };\n}\n\nconst usage = $input.first().json.usage || {};\n\nreturn [{\n  json: {\n    verdict: parsed.verdict || 'approve',\n    comment: parsed.comment || '',\n    revisions: prevData.revisions,\n    total_tokens: (usage.total_tokens || 0),\n    execution_output: prevData.execution_output,\n    description: prevData.description\n  }\n}];"
+      },
+      "id": "7l2p3n9o-5p0m-12pn-92o4-1d53ln241b14",
+      "name": "Parse Critic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "query": "UPDATE project_tasks SET total_tokens = total_tokens + $1 WHERE id = $2;",
+        "queryParams": "={{ [$json.total_tokens, $('Remember Task Data').item.json.id] }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": "e5OQkBV17S58WLzA"
+      },
+      "id": "8m3q4o0p-6q1n-23qo-03p5-2e64mo352c25",
+      "name": "Track Critic Tokens",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        2500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "query": "INSERT INTO task_reviews (task_id, verdict, critic_comment) VALUES ($1, $2, $3);",
+        "queryParams": "={{ [$('Remember Task Data').item.json.id, $json.verdict, $json.comment] }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": "e5OQkBV17S58WLzA"
+      },
+      "id": "9n4r5p1q-7r2o-34rp-14q6-3f75np463d36",
+      "name": "Insert Review",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "comparator": "equals",
+              "key": "verdict",
+              "value": "approve"
+            }
+          ]
+        }
+      },
+      "id": "0o5s6q2r-8s3p-45sq-25r7-4g86oq574e47",
+      "name": "If Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "query": "UPDATE project_tasks SET status = 'done', completed_at = NOW() WHERE id = $1;",
+        "queryParams": "={{ [$('Remember Task Data').item.json.id] }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": "e5OQkBV17S58WLzA"
+      },
+      "id": "1p6t7r3s-9t4q-56tq-36s8-5h97qr685f58",
+      "name": "Mark Done",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "query": "SELECT update_project_metrics((SELECT id FROM projects WHERE name = 'Johnny Bright'));",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": "e5OQkBV17S58WLzA"
+      },
+      "id": "2q7u8s4t-0u5r-67ur-47t9-6i08rs796g69",
+      "name": "Update Metrics (Approved)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const currentRevisions = $json.revisions || 0;\nif (currentRevisions < 2) {\n  return [{\n    json: {\n      can_revise: true,\n      revisions: currentRevisions + 1,\n      critic_comment: $json.comment,\n      description: $json.description\n    }\n  }];\n} else {\n  return [{\n    json: {\n      can_revise: false,\n      revisions: currentRevisions,\n      critic_comment: $json.comment\n    }\n  }];\n}"
+      },
+      "id": "3r8v9t5u-1v6s-78vs-58u0-7j19ts907h70",
+      "name": "Revision Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "comparator": "equals",
+              "key": "can_revise",
+              "value": true
+            }
+          ]
+        }
+      },
+      "id": "4s9w0u6v-2w7t-89wt-69v1-8k20ut018i81",
+      "name": "If Can Revise",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "query": "UPDATE project_tasks SET status = 'done_revisions', completed_at = NOW(), revision_count = $1 WHERE id = $2;",
+        "queryParams": "={{ [$json.revisions, $('Remember Task Data').item.json.id] }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": "e5OQkBV17S58WLzA"
+      },
+      "id": "5t0x1v7w-3x8u-90xu-70w2-9l31vu129j92",
+      "name": "Mark Done Revisions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        3500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "query": "SELECT update_project_metrics((SELECT id FROM projects WHERE name = 'Johnny Bright'));",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": "e5OQkBV17S58WLzA"
+      },
+      "id": "6u1y2w8x-4y9v-01yv-81x3-0m42vw230k03",
+      "name": "Update Metrics (Revisions)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        3700,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "workflowSource": "id",
+        "workflowId": "5HRCylc7G2z8ixoR"
+      },
+      "id": "7v2z3x9y-5z0w-12zw-92y4-1n53xw341l14",
+      "name": "Execute Workspace Generator",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        900,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Pending Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending Task": {
+      "main": [
+        [
+          {
+            "node": "Remember Task Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remember Task Data": {
+      "main": [
+        [
+          {
+            "node": "Task Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Found?": {
+      "main": [
+        [
+          {
+            "node": "Mark In Progress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Workspace Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark In Progress": {
+      "main": [
+        [
+          {
+            "node": "Prepare LLM Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare LLM Input": {
+      "main": [
+        [
+          {
+            "node": "Execute Task (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Task (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Extract Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Result": {
+      "main": [
+        [
+          {
+            "node": "Save Execution Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Execution Log": {
+      "main": [
+        [
+          {
+            "node": "Track Tokens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Tokens": {
+      "main": [
+        [
+          {
+            "node": "Critic Review (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critic Review (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Parse Critic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Critic": {
+      "main": [
+        [
+          {
+            "node": "Track Critic Tokens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Critic Tokens": {
+      "main": [
+        [
+          {
+            "node": "Insert Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Review": {
+      "main": [
+        [
+          {
+            "node": "If Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Approved": {
+      "main": [
+        [
+          {
+            "node": "Mark Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Revision Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Done": {
+      "main": [
+        [
+          {
+            "node": "Update Metrics (Approved)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revision Check": {
+      "main": [
+        [
+          {
+            "node": "If Can Revise",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Can Revise": {
+      "main": [
+        [
+          {
+            "node": "Prepare LLM Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Done Revisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Done Revisions": {
+      "main": [
+        [
+          {
+            "node": "Update Metrics (Revisions)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "0c27f3f9-e024-4c78-a6f2-b89f8b5c3d2e",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {}
+}

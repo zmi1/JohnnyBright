@@ -1,0 +1,91 @@
+{
+  "name": "Johnny_Error_Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "2u3p6e7f-8g9h-0i1j-2k3l-4m5n6o7p8q9r",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [250, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const execution = $input.first().json;\nconst error = execution.execution?.error || {};\nconst lastNode = execution.execution?.lastNodeExecuted || 'unknown';\nconst workflowName = execution.workflow?.name || 'unknown';\n\nreturn [{\n  json: {\n    workflow_name: workflowName,\n    node_name: lastNode,\n    error_message: error.message || 'Unknown error',\n    error_stack: error.stack || '',\n    execution_id: execution.execution?.id || '',\n    severity: 'error'\n  }\n}];"
+      },
+      "id": "3v4q7f8g-9h0i-1j2k-3l4m-5n6o7p8q9r0s",
+      "name": "Extract Error Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [250, 250]
+    },
+    {
+      "parameters": {
+        "postgresCredential": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        },
+        "query": "INSERT INTO error_log (workflow_name, node_name, error_message, error_stack, execution_id, severity)\nVALUES ($1, $2, $3, $4, $5, $6);",
+        "queryReplacement": "={{ [$json.workflow_name, $json.node_name, $json.error_message, $json.error_stack, $json.execution_id, $json.severity] }}"
+      },
+      "id": "4w5r8g9h-0i1j-2k3l-4m5n-6o7p8q9r0s1t",
+      "name": "Log Error to DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [250, 400]
+    },
+    {
+      "parameters": {
+        "postgresCredential": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        },
+        "query": "UPDATE project_tasks SET status = 'failed', completed_at = NOW()\nWHERE status = 'in_progress' AND started_at < NOW() - INTERVAL '10 minutes'\nRETURNING id;"
+      },
+      "id": "5x6s9h0i-1j2k-3l4m-5n6o-7p8q9r0s1t2u",
+      "name": "Check Stuck Tasks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [250, 550]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Error Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Error Info": {
+      "main": [
+        [
+          {
+            "node": "Log Error to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error to DB": {
+      "main": [
+        [
+          {
+            "node": "Check Stuck Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

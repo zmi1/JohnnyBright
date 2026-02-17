@@ -1,0 +1,309 @@
+{
+  "name": "Johnny Chat Interface v2",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "johnny-chat",
+        "responseMode": "lastNode",
+        "httpMethod": "POST"
+      },
+      "id": "a8f4c1e2-9b7d-4f2e-8c3a-1d5e6f7g8h9i",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 100]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/v1/chat/completions",
+        "method": "POST",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "default"
+            },
+            {
+              "name": "messages",
+              "value": "={{ [{ role: 'system', content: 'You are Johnny Bright, an autonomous AI agent assistant. You must ALWAYS return valid JSON with no additional text. Available tools: create_task, query_tasks, update_task_status, get_stats, none.\\n\\nFor create_task: {\"tool\":\"create_task\",\"arguments\":{\"description\":\"string\",\"impact\":0-100,\"urgency\":0-100,\"complexity\":0-100}}\\nFor query_tasks: {\"tool\":\"query_tasks\",\"arguments\":{\"status\":\"pending|done|in_progress|all\",\"limit\":10}}\\nFor update_task_status: {\"tool\":\"update_task_status\",\"arguments\":{\"task_id\":number,\"status\":\"done|pending|in_progress\"}}\\nFor get_stats: {\"tool\":\"get_stats\",\"arguments\":{}}\\nFor normal chat: {\"tool\":\"none\",\"response\":\"your reply text\"}\\n\\nReturn exactly one JSON object. No markdown. No explanations.' }, { role: 'user', content: $json.body.message } ] }}"
+            },
+            {
+              "name": "temperature",
+              "value": 0.2
+            },
+            {
+              "name": "max_tokens",
+              "value": 800
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "form"
+      },
+      "id": "b9e5d2f3-0c8e-5g3h-9d4b-2e6f7g8h9i0j",
+      "name": "Tool Decider (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [300, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet parsed;\ntry {\n  const jsonMatch = raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);\n} catch (e) {\n  parsed = { tool: 'none', response: raw };\n}\nreturn [{ json: parsed }];"
+      },
+      "id": "c0f6e3g4-1d9f-6h4i-0e5c-3f7g8h9i0j1k",
+      "name": "Parse Tool JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "rules": [
+            {
+              "value1": "={{ $json.tool }}",
+              "value2": "create_task",
+              "operation": "equal"
+            },
+            {
+              "value1": "={{ $json.tool }}",
+              "value2": "query_tasks",
+              "operation": "equal"
+            },
+            {
+              "value1": "={{ $json.tool }}",
+              "value2": "update_task_status",
+              "operation": "equal"
+            },
+            {
+              "value1": "={{ $json.tool }}",
+              "value2": "get_stats",
+              "operation": "equal"
+            }
+          ],
+          "options": {
+            "fallbackOutput": "extra"
+          }
+        }
+      },
+      "id": "d1g7f4h5-2e0g-7i5j-1f6d-4g8h9i0j1k2l",
+      "name": "Tool Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [700, 100]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "query": "INSERT INTO project_tasks (project_id, description, impact_score, urgency_score, complexity_score, source, status)\nVALUES (\n  (SELECT id FROM projects WHERE name='Johnny Bright'),\n  $1, $2, $3, $4, 'user', 'pending'\n)\nRETURNING id, description, status;",
+        "queryReplacement": "={{ [$json.arguments.description, $json.arguments.impact, $json.arguments.urgency, $json.arguments.complexity] }}"
+      },
+      "id": "e2h8g5i6-3f1h-8j6k-2g7e-5h9i0j1k2l3m",
+      "name": "Create Task (DB)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [900, 20],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "query": "SELECT id, description, status, source, priority_score, created_at, completed_at\nFROM project_tasks\nWHERE project_id = (SELECT id FROM projects WHERE name='Johnny Bright')\n  AND (status = $1 OR $1 = 'all')\nORDER BY priority_score DESC NULLS LAST, created_at DESC\nLIMIT $2;",
+        "queryReplacement": "={{ [$json.arguments.status, $json.arguments.limit || 10] }}"
+      },
+      "id": "f3i9h6j7-4g2i-9k7l-3h8f-6i0j1k2l3m4n",
+      "name": "Query Tasks (DB)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [900, 120],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "query": "UPDATE project_tasks SET status = $1 WHERE id = $2 RETURNING id, status;",
+        "queryReplacement": "={{ [$json.arguments.status, $json.arguments.task_id] }}"
+      },
+      "id": "g4j0i7k8-5h3j-0l8m-4i9g-7j1k2l3m4n5o",
+      "name": "Update Task (DB)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [900, 220],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "query": "SELECT\n  ps.total_tasks_completed,\n  ps.total_tasks_failed,\n  ps.total_tokens_used,\n  ps.avg_critic_pass_rate,\n  (SELECT COUNT(*) FROM project_tasks WHERE status='pending' AND project_id=ps.project_id) as pending_count,\n  (SELECT COUNT(*) FROM project_tasks WHERE status='in_progress' AND project_id=ps.project_id) as active_count\nFROM project_state ps\nJOIN projects p ON ps.project_id = p.id\nWHERE p.name = 'Johnny Bright';"
+      },
+      "id": "h5k1j8l9-6i4k-1m9n-5j0h-8k2l3m4n5o6p",
+      "name": "Get Stats (DB)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [900, 320],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.all().map(item => item.json);\nreturn [{\n  json: {\n    success: true,\n    data: data.length === 1 ? data[0] : data\n  }\n}];"
+      },
+      "id": "i6l2k9m0-7j5l-2n0o-6k1i-9l3m4n5o6p7q",
+      "name": "Format Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 170]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json.response || 'I processed your request.';\nreturn [{\n  json: {\n    success: true,\n    response: response\n  }\n}];"
+      },
+      "id": "j7m3l0n1-8k6m-3o1p-7l2j-0m4n5o6p7q8r",
+      "name": "Format Chat Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Tool Decider (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool Decider (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Parse Tool JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Tool JSON": {
+      "main": [
+        [
+          {
+            "node": "Tool Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool Router": {
+      "main": [
+        [
+          {
+            "node": "Create Task (DB)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Query Tasks (DB)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Task (DB)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Stats (DB)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Chat Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Task (DB)": {
+      "main": [
+        [
+          {
+            "node": "Format Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Tasks (DB)": {
+      "main": [
+        [
+          {
+            "node": "Format Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Task (DB)": {
+      "main": [
+        [
+          {
+            "node": "Format Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stats (DB)": {
+      "main": [
+        [
+          {
+            "node": "Format Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
