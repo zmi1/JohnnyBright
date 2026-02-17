@@ -236,7 +236,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT ps.total_tasks_completed, ps.total_tasks_failed, ps.total_tokens_used, ps.avg_critic_pass_rate,\n  (SELECT COUNT(*) FROM project_tasks WHERE status='pending' AND project_id=ps.project_id) as pending_count,\n  (SELECT COUNT(*) FROM project_tasks WHERE status='in_progress' AND project_id=ps.project_id) as active_count\nFROM project_state ps\nJOIN projects p ON ps.project_id = p.id\nWHERE p.name = 'Johnny Bright';",
+        "query": "SELECT\n  ps.total_tasks_completed,\n  ps.summary,\n  ps.last_summary_at,\n  (SELECT COUNT(*) FROM project_tasks pt WHERE pt.status='pending' AND pt.project_id=ps.project_id) as pending_count,\n  (SELECT COUNT(*) FROM project_tasks pt WHERE pt.status='in_progress' AND pt.project_id=ps.project_id) as active_count,\n  (SELECT COUNT(*) FROM project_tasks pt WHERE pt.status='done' AND pt.project_id=ps.project_id) as done_count,\n  (SELECT COUNT(*) FROM project_tasks pt WHERE pt.status='done_revisions' AND pt.project_id=ps.project_id) as done_revisions_count,\n  (SELECT SUM(pt.total_tokens) FROM project_tasks pt WHERE pt.project_id=ps.project_id) as total_tokens,\n  (SELECT COUNT(*) FROM topics) as active_topics,\n  (SELECT value->>'index' FROM workflow_state WHERE key='wrr_index') as wrr_index\nFROM project_state ps\nJOIN projects p ON ps.project_id = p.id\nWHERE p.name = 'Johnny Bright';",
         "options": {}
       },
       "id": "ea76c3a5-4a12-488a-aa71-504093588833",
@@ -279,6 +279,21 @@
         -80,
         672
       ]
+    },
+    {
+      "parameters": {
+        "content": "## Erklärung\n\nWofür ist es gedacht?\nEs ist die Mensch-Maschine-Schnittstelle zu Johnny. Damit kannst du z.B. aus einem Skript, einer App, oder sogar aus einem anderen LLM-Agenten Tasks an Johnny schicken, abfragen, und managen, ohne in die n8n UI oder direkt in die DB gehen zu müssen.\n\ncurl -X POST http://localhost:5678/webhook/johnny-chat \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"message\": \"Show me all pending tasks\"}'\n\n einen Task erstellen:\n\ncurl -X POST http://localhost:5678/webhook/johnny-chat \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"message\": \"Create a task: Optimize database indexes for project_tasks table\"}'\n\n4 Tools + Chat:\n\ncreate_task - Neuen User-Task erstellen (mit Impact/Urgency/Complexity)\nquery_tasks - Tasks abfragen (nach Status filtern)\nupdate_task_status - Task-Status ändern\nget_stats - Projekt-Statistiken abrufen\nnone - Freitext-Chat",
+        "height": 448,
+        "width": 800
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1184,
+        336
+      ],
+      "typeVersion": 1,
+      "id": "af27aaac-444b-44be-88eb-a5519580f19d",
+      "name": "Sticky Note"
     }
   ],
   "pinData": {},
@@ -409,7 +424,7 @@
     "errorWorkflow": "8EZOzDYTd9D7vKWE",
     "callerPolicy": "workflowsFromSameOwner"
   },
-  "versionId": "27fea84b-38b1-48d5-a5eb-4db3640e5024",
+  "versionId": "cb1a9deb-235f-480c-af1b-eecf9538229a",
   "meta": {
     "instanceId": "37df2b5edb3bba3db0121f21a287ff0fbc638f8b4b35c6840548e4d41c57dce5"
   },

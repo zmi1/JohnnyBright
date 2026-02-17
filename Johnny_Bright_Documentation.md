@@ -28,13 +28,13 @@ graph TB
     end
 
     subgraph "Orchestration Layer - n8n"
-        CORE["<b>Johnny_Core_v3</b><br/>Schedule: 1 min<br/>Task execution loop<br/>ID: v2qtMQlRwdgijdKs"]
+        CORE["<b>Johnny_Core_v3</b><br/>Schedule: 1 min<br/>Task execution loop<br/>ID: rHL7j62y4G0VVARK"]
 
-        CHAT["<b>Johnny_Chat_Interface_v2</b><br/>Webhook: POST /johnny-chat<br/>Task CRUD + Stats<br/>ID: oQze6bemb8jjey44"]
+        CHAT["<b>Johnny_Chat_Interface_v2</b><br/>Webhook: POST /johnny-chat<br/>Task CRUD + Stats"]
 
-        WORKSPACE["<b>Johnny_Workspace_Generator_v2</b><br/>Execute Workflow trigger<br/>Topic scheduling<br/>ID: 5HRCylc7G2z8ixoR"]
+        WORKSPACE["<b>Johnny_Workspace_Generator_v3</b><br/>Execute Workflow trigger<br/>Topic scheduling (17 nodes)<br/>ID: oiliMzVhRS1IOYed"]
 
-        ERROR["<b>Johnny_Error_Handler</b><br/>Error trigger<br/>Logging + recovery<br/>ID: new"]
+        ERROR["<b>Johnny_Error_Handler</b><br/>Error trigger<br/>Logging + recovery<br/>ID: 8EZOzDYTd9D7vKWE"]
     end
 
     subgraph "Persistent State - PostgreSQL"
@@ -107,10 +107,10 @@ graph TB
 
 | Workflow | Trigger | Zweck | Status | ID |
 |----------|---------|-------|--------|-----|
-| Johnny_Core_v3 | Schedule (1 min) | Task execution + critic review loop + WRR scheduling | active | v2qtMQlRwdgijdKs |
-| Johnny_Chat_Interface_v2 | Webhook POST /johnny-chat | Chat API for task CRUD + statistics reporting | active | oQze6bemb8jjey44 |
-| Johnny_Workspace_Generator_v2 | Execute Workflow (called by Core) | Topic scheduling + task generation from YAML config | passive | 5HRCylc7G2z8ixoR |
-| Johnny_Error_Handler | Error Trigger | Error logging + stuck task recovery + notifications | active | new |
+| Johnny_Core_v3 | Schedule (1 min) | Task execution + critic review loop + WRR scheduling | active | rHL7j62y4G0VVARK |
+| Johnny_Chat_Interface_v2 | Webhook POST /johnny-chat | Chat API for task CRUD + statistics reporting | active | (see n8n UI) |
+| Johnny_Workspace_Generator_v3 | Execute Workflow (called by Core) | Topic scheduling + task generation from YAML config (17 nodes) | passive | oiliMzVhRS1IOYed |
+| Johnny_Error_Handler | Error Trigger | Error logging + stuck task recovery + notifications | active | 8EZOzDYTd9D7vKWE |
 
 ---
 
@@ -156,79 +156,62 @@ stateDiagram-v2
 
 #### **projects**
 - **Zweck**: Project registry and metadata
-- **Key Fields**: id (UUID), name, description, created_at, is_active
-- **Sample Data**: "Johnny Bright" project record
+- **Key Fields**: id (SERIAL PK), name (TEXT UNIQUE NOT NULL)
+- **Sample Data**: `INSERT INTO projects (name) VALUES ('Johnny Bright');`
 
 #### **project_state**
-- **Zweck**: Live metrics and KPIs per project
-- **Key Fields**: project_id, total_tasks_completed, total_tasks_failed, total_tokens_used, avg_execution_time, last_updated
+- **Zweck**: Live metrics and summary per project
+- **Key Fields**: id (SERIAL PK), project_id, summary (TEXT), total_tasks_completed, last_summary_at
 - **Purpose**: Real-time dashboard metrics and performance tracking
 
 #### **topics**
 - **Zweck**: Active workspace topics from YAML configuration
-- **Key Fields**: id (string), project_id, priority (1-5), maxcount, max_tasks_per_cycle, description
-- **Loaded By**: Johnny_Workspace_Generator_v2 from TODO-by-Mike.yml
-- **Lifecycle**: Auto-synced when YAML changes
+- **Key Fields**: id (TEXT PK), priority (1-5), weight, maxcount, max_tasks_per_cycle, description, remaining_count, last_served_at, created_at
+- **Hinweis**: Kein `project_id`-Feld. Topics werden direkt über `id` referenziert.
+- **Loaded By**: Johnny_Workspace_Generator_v3 from TODO-by-Mike.yml
+- **Lifecycle**: Auto-synced when YAML changes. Topics bleiben im YAML auch wenn maxcount=0 (werden nicht gelöscht).
 
 #### **archived_topics**
 - **Zweck**: Completed topic analytics and historical reference
-- **Key Fields**: id (string), project_id, priority, tasks_completed, total_tokens_spent, total_duration_hours, archived_at
+- **Key Fields**: id (TEXT), description, total_tasks, total_input_tokens, total_output_tokens, total_tokens, archived_at, summary
 - **Purpose**: Trend analysis and performance benchmarking
 
 #### **project_tasks**
 - **Zweck**: Core task queue and execution history (master table)
 - **Key Fields**:
-  - id, project_id, title, description
-  - status (pending|in_progress|done|done_revisions|failed|decomposed)
-  - source (user|workspace|system)
-  - topic_id (links to topics table)
-  - priority_score (computed: (impact*4 + urgency*4 + (100-complexity)*2) / 10)
-  - impact, urgency, complexity (0-100 scale)
-  - started_at, completed_at, created_at
-  - total_tokens (aggregated from execution_log)
-  - revision_count (0-2)
-  - result (JSON output from LLM)
-  - error_message (if failed)
-- **Indexes**: status, source, priority_score DESC, created_at, started_at
+  - id (SERIAL PK), project_id (FK→projects), topic_id (FK→topics, nullable)
+  - parent_task_id (FK→project_tasks, nullable, für Decomposition)
+  - description (TEXT NOT NULL)
+  - status (`pending`|`in_progress`|`done`|`done_revisions`|`decomposed`)
+  - source (`user`|`workspace`|`system`)
+  - impact_score, urgency_score, complexity_score, priority_score (alle INTEGER)
+  - total_tokens (INTEGER DEFAULT 0)
+  - created_at, completed_at
+- **Hinweis**: Kein `title`-Feld, kein `failed`-Status, kein `started_at`-Feld im aktuellen Schema
+- **Indexes**: status, project_id, topic_id
 
 #### **task_reviews**
-- **Zweck**: Complete critic review history and quality metrics
-- **Key Fields**:
-  - id, task_id, attempt_number (1-3)
-  - execution_output, critic_feedback, decision (approve|revise|fail)
-  - tokens_used (execution + critic)
-  - created_at
-- **Analytics**: Used to calculate approval_rate, avg_revisions_per_task, decision_distribution
+- **Zweck**: Critic review history and quality metrics
+- **Key Fields**: id (SERIAL PK), task_id, verdict (`approve`|`revise`), critic_comment, created_at
+- **Analytics**: Used to calculate approval_rate, avg_revisions_per_task, verdict distribution
 
-#### **execution_log**
+#### **execution_log** (geplant)
 - **Zweck**: Full LLM I/O audit trail and token tracking
-- **Key Fields**:
-  - id, task_id, execution_number (1-3)
-  - prompt, response (full text, may be large)
-  - input_tokens, output_tokens, total_tokens
-  - temperature, model_name
-  - created_at, duration_ms
-- **Purpose**: Debug, token accounting, cost analysis, prompt optimization
-- **Retention**: Keep indefinitely for audit and analysis
+- **Status**: Noch nicht im aktuellen DATABASE.sql definiert, geplant für Phase 2
+- **Geplante Fields**: id, task_id, execution_number, prompt, response, input_tokens, output_tokens, total_tokens, temperature, model_name, created_at, duration_ms
 
-#### **error_log**
-- **Zweck**: Error tracking, root cause analysis, and failure patterns
-- **Key Fields**:
-  - id, task_id, workflow_id, error_message, error_type, stack_trace
-  - status_before_error, context (JSON)
-  - resolved (boolean), resolved_at
-  - created_at
-- **Purpose**: Monitor failure rates, identify systemic issues, trigger alerts
-- **Cleanup**: Archive errors > 30 days old
+#### **error_log** (geplant)
+- **Zweck**: Error tracking via Johnny_Error_Handler workflow
+- **Status**: Noch nicht im aktuellen DATABASE.sql definiert. Errors werden aktuell über den n8n Error Handler geloggt.
+- **Geplante Fields**: id, task_id, workflow_id, error_message, error_type, created_at
 
 #### **workflow_state**
 - **Zweck**: Persistent state for Weighted Round Robin and global settings
-- **Key Fields**:
-  - project_id, wrr_index (current position in rotation pattern)
-  - last_wrr_update, total_cycles_executed
-  - last_core_execution, total_core_executions
-  - settings (JSON: temperature values, timeouts, revision limits, etc.)
-- **Consistency**: Updated atomically by Core workflow to ensure deterministic scheduling
+- **Schema**: `key TEXT`, `value JSONB`, `updated_at TIMESTAMP`
+- **WRR Index**: Gespeichert als `key='wrr_index'`, `value='{"index": 0}'` (JSONB)
+  - Lesen: `SELECT value->>'index' AS wrr_index FROM workflow_state WHERE key = 'wrr_index';`
+  - Schreiben: `UPDATE workflow_state SET value = jsonb_set(value, '{index}', to_jsonb($1::int)), updated_at = NOW() WHERE key = 'wrr_index';`
+- **Consistency**: Updated atomically by Workspace Generator to ensure deterministic scheduling
 
 ### Key Computed Field
 
@@ -307,7 +290,7 @@ The Weighted Round Robin (WRR) ensures fair allocation of execution cycles acros
 
 ### State Management
 
-- **Storage**: `workflow_state.wrr_index` (0-14)
+- **Storage**: `workflow_state` mit `key='wrr_index'`, `value->>'index'` (0-14)
 - **Rotation**: Incremented by 1 each Core cycle, wraps to 0 at end
 - **Update**: Atomic, synchronized by Core workflow
 - **Determinism**: No randomness; always processes same topic at same pattern position
@@ -581,7 +564,7 @@ Follow these steps in order to deploy Johnny Bright.
 
 **Step 2: Import Workspace Generator**
 - [ ] Click **Workflows** → **Import from file**
-- [ ] Select `Johnny_Workspace_Generator_v2.json`
+- [ ] Select `Johnny_Workspace_Generator_v3.json`
 - [ ] **Do NOT activate yet** (leave passive)
 - [ ] Note the **Workflow ID**
 
@@ -880,7 +863,7 @@ curl -X GET http://localhost:5678/api/v1/workflows \
 1. [ ] Check error_log:
    ```sql
    SELECT * FROM error_log
-   WHERE workflow_id='5HRCylc7G2z8ixoR'
+   WHERE workflow_id='oiliMzVhRS1IOYed'
    ORDER BY created_at DESC LIMIT 1;
    ```
    Look for YAML parsing errors
@@ -903,7 +886,7 @@ curl -X GET http://localhost:5678/api/v1/workflows \
    ```
 
 5. [ ] Manually trigger Workspace Generator (or wait for next cycle):
-   - n8n UI → Johnny_Workspace_Generator_v2 → **Execute**
+   - n8n UI → Johnny_Workspace_Generator_v3 → **Execute**
 
 6. [ ] Verify topics are synced:
    ```sql
@@ -1021,7 +1004,7 @@ SELECT
    AND started_at < NOW() - INTERVAL '10 minutes') as stuck_tasks,
   (SELECT COUNT(*) FROM error_log WHERE created_at > NOW() - INTERVAL '1 hour') as recent_errors,
   (SELECT SUM(total_tokens) FROM execution_log WHERE created_at > NOW() - INTERVAL '24 hours') as daily_tokens,
-  (SELECT wrr_index FROM workflow_state) as current_wrr_index,
+  (SELECT value->>'index' FROM workflow_state WHERE key='wrr_index') as current_wrr_index,
   (SELECT COUNT(*) FROM topics) as active_topics,
   (SELECT COUNT(*) FROM project_tasks WHERE status='done'
    AND completed_at > NOW() - INTERVAL '24 hours') as tasks_completed_today;
@@ -1210,7 +1193,7 @@ The YAML configuration file (`TODO-by-Mike.yml`) defines workspace topics, prior
 /home/node/.n8n-files/TODO-by-Mike.yml
 ```
 
-(Mounted into n8n container, readable by Johnny_Workspace_Generator_v2 workflow)
+(Mounted into n8n container, readable by Johnny_Workspace_Generator_v3 workflow)
 
 ### Schema
 
@@ -1306,21 +1289,38 @@ topics:
 - Include specific goals, focus areas, quality criteria
 - Example: "Improve UX for the Enneagramm app. Focus on accessibility, responsive design, and user workflows."
 
-### Workspace Generator Behavior
+### Workspace Generator Behavior (v3 - 17 Nodes)
 
-**When Johnny_Workspace_Generator_v2 executes**:
+**Node-Kette**:
+```
+Execute Workflow Trigger → Read YAML → Parse YAML → If Topics Exist
+  → (TRUE) Get WRR Index → WRR Selection → Update WRR Index → If Topic Selected
+    → (TRUE) Sync Topic to DB → Generate Tasks LLM → Parse Tasks → Insert Tasks
+      → Read YAML for Decrement → Decrement YAML → Write YAML Back
+    → (FALSE) Idle Research → Insert Idle Task
+  → (FALSE) Idle Research → Insert Idle Task
+```
 
-1. Read `TODO-by-Mike.yml` from filesystem
-2. Parse YAML and extract topics list
-3. For each topic:
-   - Count existing pending tasks in that topic
-   - If count < maxcount:
-     - Generate new tasks (up to max_tasks_per_cycle)
-     - Use topic description as LLM prompt context
-     - Set topic_id in project_tasks for each new task
-4. Sync topics to database `topics` table
-5. Update `topics.maxcount`, `topics.priority`, etc. if changed in YAML
-6. Completed topics can be archived to `archived_topics` when empty
+**Ablauf im Detail**:
+
+1. **Read YAML**: Liest `TODO-by-Mike.yml` als Binary
+2. **Parse YAML**: Parsed mit `js-yaml`, prüft ob Topics vorhanden
+3. **If Topics Exist**: Branching bei leerer Topic-Liste
+4. **Get WRR Index**: `SELECT value->>'index' AS wrr_index FROM workflow_state WHERE key = 'wrr_index';`
+5. **WRR Selection**: Wählt Topic per Weighted Round Robin Pattern `[1,1,1,1,1, 2,2,2,2, 3,3,3, 4,4, 5]`
+6. **Update WRR Index**: `jsonb_set()` Update in workflow_state
+7. **If Topic Selected**: Prüft ob ein passendes Topic gefunden wurde
+8. **Sync Topic to DB**: UPSERT in topics-Tabelle (ohne project_id)
+9. **Generate Tasks LLM**: HTTP POST an `http://host.docker.internal:8000/v1/chat/completions`, topic_description wird mit `JSON.stringify().slice(1,-1)` safe escaped
+10. **Parse Tasks**: Extrahiert JSON-Array aus LLM-Response, Score-Validation mit `clamp()`-Funktion (1-100)
+11. **Insert Tasks**: Schreibt 5 Tasks in project_tasks
+12. **Read YAML for Decrement → Decrement YAML → Write YAML Back**: 3-Node-Kette zum Dekrementieren von `maxcount` im YAML. Nutzt n8n Binary File Nodes statt `fs`-Modul (das in n8n Code-Nodes blockiert ist).
+
+**Wichtige technische Details**:
+- `fs`-Modul ist in n8n Code-Nodes standardmäßig deaktiviert. Daher wird YAML-Schreiben über Read Binary File → Code → Write Binary File gelöst.
+- LLM-Antworten mit Newlines werden via `JSON.stringify($description.replace(/[\n\r]/g, ' ').trim()).slice(1, -1)` escaped
+- Score-Werte werden mit `clamp()` auf 1-100 begrenzt, `NaN` wird zu Default 50
+- Topics werden NICHT aus dem YAML gelöscht wenn maxcount=0 erreicht ist
 
 ### Best Practices
 
@@ -1393,7 +1393,7 @@ echo "5. Today's completion rate:"
 psql -h $DBHOST -U $DBUSER -d $DBNAME -c "SELECT COUNT(CASE WHEN status='done' THEN 1 END)::float / COUNT(*) * 100 as completion_rate FROM project_tasks WHERE completed_at > NOW() - INTERVAL '24 hours';"
 
 echo "6. WRR index (current position):"
-psql -h $DBHOST -U $DBUSER -d $DBNAME -c "SELECT wrr_index FROM workflow_state;"
+psql -h $DBHOST -U $DBUSER -d $DBNAME -c "SELECT value->>'index' as wrr_index FROM workflow_state WHERE key='wrr_index';"
 
 echo "7. Active topics:"
 psql -h $DBHOST -U $DBUSER -d $DBNAME -c "SELECT id, priority, COUNT(*) as pending_count FROM topics LEFT JOIN project_tasks ON topics.id = project_tasks.topic_id WHERE project_tasks.status='pending' GROUP BY topics.id, topics.priority ORDER BY priority;"
@@ -1455,6 +1455,7 @@ done
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-02-17 | Initial comprehensive documentation |
+| 2.0 | 2026-02-17 | v3 Workspace Generator (17 nodes), JSONB workflow_state, DB-Schema corrections, fixed all workflow IDs, corrected topics table (no project_id), 3-node YAML decrement chain (Read→Code→Write), score validation, safe JSON escaping for LLM calls |
 
 ---
 
