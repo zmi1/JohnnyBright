@@ -3,58 +3,102 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "2u3p6e7f-8g9h-0i1j-2k3l-4m5n6o7p8q9r",
+      "id": "773ea96b-9404-4a2d-9aa1-7106efc257a2",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
-      "position": [250, 100]
+      "position": [
+        592,
+        272
+      ]
     },
     {
       "parameters": {
         "jsCode": "const execution = $input.first().json;\nconst error = execution.execution?.error || {};\nconst lastNode = execution.execution?.lastNodeExecuted || 'unknown';\nconst workflowName = execution.workflow?.name || 'unknown';\n\nreturn [{\n  json: {\n    workflow_name: workflowName,\n    node_name: lastNode,\n    error_message: error.message || 'Unknown error',\n    error_stack: error.stack || '',\n    execution_id: execution.execution?.id || '',\n    severity: 'error'\n  }\n}];"
       },
-      "id": "3v4q7f8g-9h0i-1j2k-3l4m-5n6o7p8q9r0s",
+      "id": "9236db67-653b-4960-b235-7ba9aaf89998",
       "name": "Extract Error Info",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [250, 250]
+      "position": [
+        1056,
+        272
+      ]
     },
     {
       "parameters": {
-        "postgresCredential": {
-          "id": "e5OQkBV17S58WLzA",
-          "name": "johnny-postgres"
-        },
+        "operation": "executeQuery",
         "query": "INSERT INTO error_log (workflow_name, node_name, error_message, error_stack, execution_id, severity)\nVALUES ($1, $2, $3, $4, $5, $6);",
-        "queryReplacement": "={{ [$json.workflow_name, $json.node_name, $json.error_message, $json.error_stack, $json.execution_id, $json.severity] }}"
+        "options": {
+          "queryReplacement": "={{ [$json.workflow_name, $json.node_name, $json.error_message, $json.error_stack, $json.execution_id, $json.severity] }}"
+        }
       },
-      "id": "4w5r8g9h-0i1j-2k3l-4m5n-6o7p8q9r0s1t",
+      "id": "ff550aa9-e9d8-4e78-970a-c4d51f5179f0",
       "name": "Log Error to DB",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
-      "position": [250, 400]
+      "position": [
+        1312,
+        272
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     },
     {
       "parameters": {
-        "postgresCredential": {
-          "id": "e5OQkBV17S58WLzA",
-          "name": "johnny-postgres"
-        },
-        "query": "UPDATE project_tasks SET status = 'failed', completed_at = NOW()\nWHERE status = 'in_progress' AND started_at < NOW() - INTERVAL '10 minutes'\nRETURNING id;"
+        "operation": "executeQuery",
+        "query": "UPDATE project_tasks SET status = 'failed', completed_at = NOW()\nWHERE status = 'in_progress' AND started_at < NOW() - INTERVAL '10 minutes'\nRETURNING id;",
+        "options": {}
       },
-      "id": "5x6s9h0i-1j2k-3l4m-5n6o-7p8q9r0s1t2u",
+      "id": "df4ce1c1-311f-4a87-9811-3937c286102e",
       "name": "Check Stuck Tasks",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
-      "position": [250, 550]
+      "position": [
+        1552,
+        272
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "316750258",
+        "text": "=ERROR aus n8n: \nworkflow {{ $json.workflow.name }}\n\nexecution:\n{{ $json.execution.url }}\n\nExecuction.Error: {{ $json.execution.error.message }}\n\nTrigger.Error.Name: {{ $json.trigger.error.name }}\n\nTrigger.Error.Description: {{ $json.trigger.error.description }}\n\nTrigger.Error.Message: {{ $json.trigger.error.message }}\n",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        832,
+        272
+      ],
+      "id": "2b45c753-eb5d-41b1-bd02-0e9238d0418b",
+      "name": "Telegram2Mike",
+      "webhookId": "d0a11e53-77c3-48e3-b5e4-ee0fdfd84e6e",
+      "credentials": {
+        "telegramApi": {
+          "id": "weFGBP4OC5p0o8qy",
+          "name": "Telegram Mike"
+        }
+      }
     }
   ],
+  "pinData": {},
   "connections": {
     "Error Trigger": {
       "main": [
         [
           {
-            "node": "Extract Error Info",
+            "node": "Telegram2Mike",
             "type": "main",
             "index": 0
           }
@@ -82,10 +126,38 @@
           }
         ]
       ]
+    },
+    "Check Stuck Tasks": {
+      "main": [
+        []
+      ]
+    },
+    "Telegram2Mike": {
+      "main": [
+        [
+          {
+            "node": "Extract Error Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
   "settings": {
-    "executionOrder": "v1"
-  }
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "8EZOzDYTd9D7vKWE",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "7ba43993-ce44-445c-8f57-7c8b244d5e06",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "37df2b5edb3bba3db0121f21a287ff0fbc638f8b4b35c6840548e4d41c57dce5"
+  },
+  "id": "8EZOzDYTd9D7vKWE",
+  "tags": []
 }

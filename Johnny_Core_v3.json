@@ -3,117 +3,162 @@
   "nodes": [
     {
       "parameters": {
-        "rule": "everyMinute"
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
       },
-      "id": "6a1f2c8d-4e9b-11ec-81d3-0242ac130003",
+      "id": "5a132e75-923a-4ffb-92b6-6bd489962c08",
+      "icon": "fa:clock",
       "name": "Schedule Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        100,
-        200
+        -3456,
+        208
       ]
     },
     {
       "parameters": {
+        "operation": "executeQuery",
         "query": "SELECT * FROM get_next_pending_task((SELECT id FROM projects WHERE name='Johnny Bright'));",
         "options": {}
       },
-      "credentials": {
-        "postgres": "e5OQkBV17S58WLzA"
-      },
-      "id": "7b2f3d9e-5f0c-12fd-92e4-1353bd241114",
+      "id": "b9121235-ecbf-49e8-a619-9b6789f67d6d",
+      "icon": "fa:database",
       "name": "Get Pending Task",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
       "position": [
-        300,
-        200
-      ]
+        -3200,
+        208
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     },
     {
       "parameters": {
-        "keepOnlySet": false,
-        "dotNotation": false,
-        "options": {},
-        "assignments": [
-          {
-            "name": "id",
-            "value": "={{ $json.id }}"
-          },
-          {
-            "name": "description",
-            "value": "={{ $json.description }}"
-          },
-          {
-            "name": "topic_id",
-            "value": "={{ $json.topic_id }}"
-          },
-          {
-            "name": "source",
-            "value": "={{ $json.source }}"
-          }
-        ]
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "task_id",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "a2",
+              "name": "description",
+              "value": "={{ $json.description }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "topic_id",
+              "value": "={{ $json.topic_id }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "source",
+              "value": "={{ $json.source }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
       },
-      "id": "8c3g4e0f-6g1d-23ge-03f5-2464ce352225",
+      "id": "d1552601-63d1-45fc-aaff-232dfbea8b4f",
+      "icon": "fa:sticky-note",
       "name": "Remember Task Data",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        500,
-        200
+        -2944,
+        208
       ]
     },
     {
       "parameters": {
         "conditions": {
-          "number": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeLeft": "expression",
+            "typeRight": "none",
+            "operator": "exists"
+          },
+          "combinator": "and",
+          "conditions": [
             {
-              "comparator": "exists",
-              "key": "id",
-              "value": ""
+              "id": "condition_0",
+              "leftValue": "={{ $json.task_id }}",
+              "rightValue": "",
+              "operator": {
+                "name": "exists",
+                "type": "string"
+              },
+              "typeLeft": "expression",
+              "typeRight": "none"
             }
           ]
-        }
+        },
+        "options": {}
       },
-      "id": "9d4h5f1g-7h2e-34hf-14g6-3575df463336",
-      "name": "Task Found?",
+      "id": "3baa4f24-cf10-4e96-9d1d-93fe3e0cdc7d",
+      "icon": "fa:code-branch",
+      "name": "If Task Found",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        700,
-        200
+        -2752,
+        208
       ]
     },
     {
       "parameters": {
+        "operation": "executeQuery",
         "query": "UPDATE project_tasks SET status = 'in_progress', started_at = NOW() WHERE id = $1;",
-        "queryParams": "={{ [$('Remember Task Data').item.json.id] }}",
-        "options": {}
+        "options": {
+          "queryReplacement": "={{ [$json.task_id] }}"
+        }
       },
-      "credentials": {
-        "postgres": "e5OQkBV17S58WLzA"
-      },
-      "id": "0e5i6g2h-8i3f-45ig-25h7-4686eg574447",
+      "id": "aa9d36a8-3cbf-4197-8428-bf22ea5e613e",
+      "icon": "fa:database",
       "name": "Mark In Progress",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
       "position": [
-        900,
-        100
-      ]
+        -2496,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const taskData = $('Remember Task Data').item.json;\nconst prevCritic = $input.first().json.critic_comment || '';\nconst revisions = $input.first().json.revisions || 0;\n\nlet prompt = `Task:\\n${taskData.description}`;\nif (prevCritic) {\n  prompt += `\\n\\nPrevious Critic Feedback (revision ${revisions}):\\n${prevCritic}\\n\\nPlease address the feedback above.`;\n}\n\nreturn [{\n  json: {\n    prompt: prompt,\n    description: taskData.description,\n    revisions: revisions,\n    critic_comment: prevCritic\n  }\n}];"
+        "jsCode": "const taskData = $('Remember Task Data').first().json;\nconst description = taskData.description;\n\n// Check if we're in a revision loop\nlet criticComment = '';\ntry {\n  criticComment = $json.critic_comment || '';\n} catch(e) {\n  criticComment = '';\n}\n\nconst revisions = typeof $json.revisions === 'number' ? $json.revisions : 0;\n\nreturn [{\n  json: {\n    description: description,\n    critic_comment: criticComment,\n    revisions: revisions,\n    task_id: taskData.task_id\n  }\n}];"
       },
-      "id": "1f6j7h3i-9j4g-56jh-36i8-5797fh685558",
+      "id": "29070bbf-a561-454b-bf55-6e22eebb203a",
+      "icon": "fa:code",
       "name": "Prepare LLM Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1100,
-        100
+        -2256,
+        112
       ]
     },
     {
@@ -121,311 +166,349 @@
         "method": "POST",
         "url": "http://host.docker.internal:8000/v1/chat/completions",
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "model",
-              "value": "default"
-            },
-            {
-              "name": "messages",
-              "value": "[{\"role\": \"system\", \"content\": \"You are Johnny Bright, an autonomous AI agent. Execute tasks thoroughly and professionally. Provide complete, actionable results. Always think step by step.\"}, {\"role\": \"user\", \"content\": \"{{ $json.prompt }}\"}]"
-            },
-            {
-              "name": "temperature",
-              "value": "0.4"
-            },
-            {
-              "name": "max_tokens",
-              "value": "2048"
-            }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"default\",\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are Johnny Bright, an autonomous AI execution engine. Execute the given task professionally and thoroughly. Provide detailed, actionable output.\"},\n    {\"role\": \"user\", \"content\": \"Task:\\n{{ $json.description }}\\n\\n{{ $json.critic_comment ? 'Previous reviewer feedback to address:\\n' + $json.critic_comment : '' }}\"}\n  ],\n  \"temperature\": 0.4,\n  \"max_tokens\": 2000\n}",
         "options": {}
       },
-      "id": "2g7k8i4j-0k5h-67ki-47j9-6808gi796669",
-      "name": "Execute Task (LLM)",
+      "id": "28666fc8-c6e5-404c-a20c-1685f3561622",
+      "icon": "fa:rocket",
+      "name": "Execute Task LLM",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "typeVersion": 4,
       "position": [
-        1300,
-        100
+        -2000,
+        112
       ]
     },
     {
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst prevData = $('Prepare LLM Input').first().json;\n\nconst output = response.choices[0].message.content;\nconst usage = response.usage || {};\n\nreturn [{\n  json: {\n    execution_output: output,\n    input_tokens: usage.prompt_tokens || 0,\n    output_tokens: usage.completion_tokens || 0,\n    total_tokens: usage.total_tokens || 0,\n    revisions: prevData.revisions,\n    description: prevData.description,\n    critic_comment: prevData.critic_comment\n  }\n}];"
+        "jsCode": "const response = $input.first().json;\nconst taskData = $('Remember Task Data').first().json;\nconst prepData = $('Prepare LLM Input').first().json;\n\nconst content = response.choices?.[0]?.message?.content || 'No output';\nconst usage = response.usage || {};\n\nreturn [{\n  json: {\n    task_id: taskData.task_id,\n    execution_output: content,\n    input_tokens: usage.prompt_tokens || 0,\n    output_tokens: usage.completion_tokens || 0,\n    total_tokens: usage.total_tokens || 0,\n    revisions: prepData.revisions,\n    description: taskData.description\n  }\n}];"
       },
-      "id": "3h8l9j5k-1l6i-78lj-58k0-7919hj807770",
+      "id": "5f12d58e-1ef8-48d1-84dc-c2ae08f5ab7d",
+      "icon": "fa:code",
       "name": "Extract Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1500,
-        100
+        -1744,
+        112
       ]
     },
     {
       "parameters": {
-        "query": "INSERT INTO execution_log (task_id, revision_number, llm_output, input_tokens, output_tokens, total_tokens, temperature) VALUES ($1, $2, $3, $4, $5, $6, 0.4);",
-        "queryParams": "={{ [$('Remember Task Data').item.json.id, $json.revisions, $json.execution_output, $json.input_tokens, $json.output_tokens, $json.total_tokens] }}",
-        "options": {}
+        "operation": "executeQuery",
+        "query": "INSERT INTO execution_log (task_id, revision_number, llm_output, input_tokens, output_tokens, total_tokens, temperature, model)\nVALUES ($1, $2, $3, $4, $5, $6, 0.4, 'qwen2.5-32b');",
+        "options": {
+          "queryReplacement": "={{ [$json.task_id, $json.revisions, $json.execution_output, $json.input_tokens, $json.output_tokens, $json.total_tokens] }}"
+        }
       },
-      "credentials": {
-        "postgres": "e5OQkBV17S58WLzA"
-      },
-      "id": "4i9m0k6l-2m7j-89mk-69l1-8a20ik918881",
-      "name": "Save Execution Log",
+      "id": "1c0e10d9-0c4d-4f56-8e95-98ce109da0c3",
+      "icon": "fa:database",
+      "name": "Log Execution",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
       "position": [
-        1700,
-        100
-      ]
+        -1504,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     },
     {
       "parameters": {
+        "operation": "executeQuery",
         "query": "UPDATE project_tasks SET total_tokens = total_tokens + $1 WHERE id = $2;",
-        "queryParams": "={{ [$json.total_tokens, $('Remember Task Data').item.json.id] }}",
-        "options": {}
+        "options": {
+          "queryReplacement": "={{ [$json.total_tokens, $json.task_id] }}"
+        }
       },
-      "credentials": {
-        "postgres": "e5OQkBV17S58WLzA"
-      },
-      "id": "5j0n1l7m-3n8k-90nl-70m2-9b31jl029992",
+      "id": "b710a8a9-dbed-4a19-bb9f-997cd4d93d7d",
+      "icon": "fa:database",
       "name": "Track Tokens",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
       "position": [
-        1900,
-        100
-      ]
+        -1248,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     },
     {
       "parameters": {
         "method": "POST",
         "url": "http://host.docker.internal:8000/v1/chat/completions",
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"default\",\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a strict quality reviewer. Evaluate the task output. Return ONLY valid JSON: {\\\"verdict\\\": \\\"approve\\\" or \\\"revise\\\", \\\"comment\\\": \\\"your feedback\\\"}. Approve if the output is thorough and actionable. Revise if it is vague, incomplete, or wrong.\"},\n    {\"role\": \"user\", \"content\": \"Original task:\\n{{ $json.description }}\\n\\nOutput to review:\\n{{ $json.execution_output }}\"}\n  ],\n  \"temperature\": 0.1,\n  \"max_tokens\": 400\n}",
+        "options": {}
+      },
+      "id": "128f8409-81cd-4d74-abce-7a43b94b04bf",
+      "icon": "fa:gavel",
+      "name": "Critic Review LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -1008,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst prevData = $('Extract Result').first().json;\nconst raw = response.choices?.[0]?.message?.content || '';\n\nlet verdict = 'approve';\nlet comment = '';\n\ntry {\n  const jsonMatch = raw.match(/\\{[\\s\\S]*\\}/);\n  const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);\n  verdict = parsed.verdict === 'revise' ? 'revise' : 'approve';\n  comment = parsed.comment || '';\n} catch (e) {\n  // If critic fails to return JSON, auto-approve to prevent blocking\n  verdict = 'approve';\n  comment = 'Auto-approved: critic response was not valid JSON';\n}\n\nreturn [{\n  json: {\n    task_id: prevData.task_id,\n    verdict: verdict,\n    comment: comment,\n    revisions: prevData.revisions,\n    execution_output: prevData.execution_output\n  }\n}];"
+      },
+      "id": "7165f260-089e-4e59-bfa3-20f43f6945d2",
+      "icon": "fa:code",
+      "name": "Parse Critic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO task_reviews (task_id, verdict, critic_comment) VALUES ($1, $2, $3);",
+        "options": {
+          "queryReplacement": "={{ [$json.task_id, $json.verdict, $json.comment] }}"
+        }
+      },
+      "id": "31cfd8ee-1faa-419d-a023-c323c2859731",
+      "icon": "fa:database",
+      "name": "Insert Review",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeLeft": "expression",
+            "typeRight": "string",
+            "operator": "equals"
+          },
+          "combinator": "and",
+          "conditions": [
             {
-              "name": "model",
-              "value": "default"
-            },
-            {
-              "name": "messages",
-              "value": "[{\"role\": \"system\", \"content\": \"You are a strict quality reviewer. Evaluate the following task output. Return ONLY valid JSON with no additional text: {\\\"verdict\\\": \\\"approve\\\" or \\\"revise\\\", \\\"comment\\\": \\\"your feedback\\\"}. Approve if the output is complete, correct, and actionable. Revise if it's incomplete, incorrect, or low quality.\"}, {\"role\": \"user\", \"content\": \"Original Task:\\n{{ $json.description }}\\n\\nTask Output:\\n{{ $json.execution_output }}\"}]"
-            },
-            {
-              "name": "temperature",
-              "value": "0.1"
-            },
-            {
-              "name": "max_tokens",
-              "value": "500"
+              "id": "condition_0",
+              "leftValue": "={{ $json.verdict }}",
+              "rightValue": "approve",
+              "operator": {
+                "name": "equals",
+                "type": "string"
+              },
+              "typeLeft": "expression",
+              "typeRight": "string"
             }
           ]
         },
         "options": {}
       },
-      "id": "6k1o2m8n-4o9l-01om-81n3-0c42km130a03",
-      "name": "Critic Review (LLM)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2100,
-        100
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nconst prevData = $('Extract Result').first().json;\n\nlet parsed;\ntry {\n  // Try to extract JSON even if wrapped in markdown\n  const jsonMatch = raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);\n} catch (e) {\n  // If parsing fails, auto-approve to avoid blocking\n  parsed = { verdict: 'approve', comment: 'Auto-approved: critic response was not valid JSON.' };\n}\n\nconst usage = $input.first().json.usage || {};\n\nreturn [{\n  json: {\n    verdict: parsed.verdict || 'approve',\n    comment: parsed.comment || '',\n    revisions: prevData.revisions,\n    total_tokens: (usage.total_tokens || 0),\n    execution_output: prevData.execution_output,\n    description: prevData.description\n  }\n}];"
-      },
-      "id": "7l2p3n9o-5p0m-12pn-92o4-1d53ln241b14",
-      "name": "Parse Critic",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2300,
-        100
-      ]
-    },
-    {
-      "parameters": {
-        "query": "UPDATE project_tasks SET total_tokens = total_tokens + $1 WHERE id = $2;",
-        "queryParams": "={{ [$json.total_tokens, $('Remember Task Data').item.json.id] }}",
-        "options": {}
-      },
-      "credentials": {
-        "postgres": "e5OQkBV17S58WLzA"
-      },
-      "id": "8m3q4o0p-6q1n-23qo-03p5-2e64mo352c25",
-      "name": "Track Critic Tokens",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [
-        2500,
-        100
-      ]
-    },
-    {
-      "parameters": {
-        "query": "INSERT INTO task_reviews (task_id, verdict, critic_comment) VALUES ($1, $2, $3);",
-        "queryParams": "={{ [$('Remember Task Data').item.json.id, $json.verdict, $json.comment] }}",
-        "options": {}
-      },
-      "credentials": {
-        "postgres": "e5OQkBV17S58WLzA"
-      },
-      "id": "9n4r5p1q-7r2o-34rp-14q6-3f75np463d36",
-      "name": "Insert Review",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [
-        2700,
-        100
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "comparator": "equals",
-              "key": "verdict",
-              "value": "approve"
-            }
-          ]
-        }
-      },
-      "id": "0o5s6q2r-8s3p-45sq-25r7-4g86oq574e47",
+      "id": "957d6ef9-b008-4c6f-9258-a3124cb8e1c5",
+      "icon": "fa:code-branch",
       "name": "If Approved",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        2900,
-        100
+        -256,
+        112
       ]
     },
     {
       "parameters": {
+        "operation": "executeQuery",
         "query": "UPDATE project_tasks SET status = 'done', completed_at = NOW() WHERE id = $1;",
-        "queryParams": "={{ [$('Remember Task Data').item.json.id] }}",
-        "options": {}
+        "options": {
+          "queryReplacement": "={{ [$json.task_id] }}"
+        }
       },
-      "credentials": {
-        "postgres": "e5OQkBV17S58WLzA"
-      },
-      "id": "1p6t7r3s-9t4q-56tq-36s8-5h97qr685f58",
+      "id": "6e8976ff-3fbc-4f33-bd01-e0da61786243",
+      "icon": "fa:database",
       "name": "Mark Done",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
       "position": [
-        3100,
-        50
-      ]
+        0,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     },
     {
       "parameters": {
-        "query": "SELECT update_project_metrics((SELECT id FROM projects WHERE name = 'Johnny Bright'));",
+        "operation": "executeQuery",
+        "query": "SELECT update_project_metrics((SELECT id FROM projects WHERE name='Johnny Bright'));",
         "options": {}
       },
-      "credentials": {
-        "postgres": "e5OQkBV17S58WLzA"
-      },
-      "id": "2q7u8s4t-0u5r-67ur-47t9-6i08rs796g69",
-      "name": "Update Metrics (Approved)",
+      "id": "2205c620-1619-48dd-8677-2ee211b4bb7c",
+      "icon": "fa:database",
+      "name": "Update Metrics",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
       "position": [
-        3300,
-        50
-      ]
+        256,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const currentRevisions = $json.revisions || 0;\nif (currentRevisions < 2) {\n  return [{\n    json: {\n      can_revise: true,\n      revisions: currentRevisions + 1,\n      critic_comment: $json.comment,\n      description: $json.description\n    }\n  }];\n} else {\n  return [{\n    json: {\n      can_revise: false,\n      revisions: currentRevisions,\n      critic_comment: $json.comment\n    }\n  }];\n}"
+        "jsCode": "const maxRevisions = 2;\nconst current = $json.revisions || 0;\n\nif (current < maxRevisions) {\n  return [{\n    json: {\n      can_revise: true,\n      revisions: current + 1,\n      critic_comment: $json.comment,\n      task_id: $json.task_id\n    }\n  }];\n} else {\n  return [{\n    json: {\n      can_revise: false,\n      task_id: $json.task_id\n    }\n  }];\n}"
       },
-      "id": "3r8v9t5u-1v6s-78vs-58u0-7j19ts907h70",
+      "id": "6e0e7e63-013e-4163-a5a0-312ca14357b0",
+      "icon": "fa:code",
       "name": "Revision Check",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3100,
-        250
+        0,
+        208
       ]
     },
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeLeft": "expression",
+            "typeRight": "boolean",
+            "operator": "equals"
+          },
+          "combinator": "and",
+          "conditions": [
             {
-              "comparator": "equals",
-              "key": "can_revise",
-              "value": true
+              "id": "condition_0",
+              "leftValue": "={{ $json.can_revise }}",
+              "rightValue": "true",
+              "operator": {
+                "name": "equals",
+                "type": "boolean"
+              },
+              "typeLeft": "expression",
+              "typeRight": "boolean"
             }
           ]
-        }
+        },
+        "options": {}
       },
-      "id": "4s9w0u6v-2w7t-89wt-69v1-8k20ut018i81",
+      "id": "789eeb2d-dfd6-49e6-9eee-6db59a99aafe",
+      "icon": "fa:code-branch",
       "name": "If Can Revise",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3300,
-        250
+        256,
+        208
       ]
     },
     {
       "parameters": {
-        "query": "UPDATE project_tasks SET status = 'done_revisions', completed_at = NOW(), revision_count = $1 WHERE id = $2;",
-        "queryParams": "={{ [$json.revisions, $('Remember Task Data').item.json.id] }}",
-        "options": {}
+        "operation": "executeQuery",
+        "query": "UPDATE project_tasks SET status = 'done_revisions', completed_at = NOW(), revision_count = 2 WHERE id = $1;",
+        "options": {
+          "queryReplacement": "={{ [$json.task_id] }}"
+        }
       },
-      "credentials": {
-        "postgres": "e5OQkBV17S58WLzA"
-      },
-      "id": "5t0x1v7w-3x8u-90xu-70w2-9l31vu129j92",
+      "id": "bd398f60-a527-4a23-8036-fcaf4aa6fb69",
+      "icon": "fa:database",
       "name": "Mark Done Revisions",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
       "position": [
-        3500,
-        250
-      ]
+        512,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     },
     {
       "parameters": {
-        "query": "SELECT update_project_metrics((SELECT id FROM projects WHERE name = 'Johnny Bright'));",
+        "operation": "executeQuery",
+        "query": "SELECT update_project_metrics((SELECT id FROM projects WHERE name='Johnny Bright'));",
         "options": {}
       },
-      "credentials": {
-        "postgres": "e5OQkBV17S58WLzA"
-      },
-      "id": "6u1y2w8x-4y9v-01yv-81x3-0m42vw230k03",
-      "name": "Update Metrics (Revisions)",
+      "id": "d0e90bdc-1ffa-47ab-bc5f-5bcffb9478cb",
+      "icon": "fa:database",
+      "name": "Update Metrics 2",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
       "position": [
-        3700,
-        250
-      ]
+        752,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     },
     {
       "parameters": {
-        "workflowSource": "id",
-        "workflowId": "5HRCylc7G2z8ixoR"
+        "workflowId": {
+          "__rl": true,
+          "value": "oiliMzVhRS1IOYed",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/oiliMzVhRS1IOYed",
+          "cachedResultName": "Johnny_Workspace_Generator_v3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
       },
-      "id": "7v2z3x9y-5z0w-12zw-92y4-1n53xw341l14",
-      "name": "Execute Workspace Generator",
       "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1,
+      "typeVersion": 1.3,
       "position": [
-        900,
-        350
-      ]
+        -2496,
+        352
+      ],
+      "id": "f33f874b-77a8-45ea-8e77-ff08a4df72b8",
+      "name": "Execute Workspace Generator"
     }
   ],
+  "pinData": {},
   "connections": {
     "Schedule Trigger": {
       "main": [
@@ -453,14 +536,14 @@
       "main": [
         [
           {
-            "node": "Task Found?",
+            "node": "If Task Found",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Task Found?": {
+    "If Task Found": {
       "main": [
         [
           {
@@ -493,14 +576,14 @@
       "main": [
         [
           {
-            "node": "Execute Task (LLM)",
+            "node": "Execute Task LLM",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Execute Task (LLM)": {
+    "Execute Task LLM": {
       "main": [
         [
           {
@@ -515,14 +598,14 @@
       "main": [
         [
           {
-            "node": "Save Execution Log",
+            "node": "Log Execution",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Save Execution Log": {
+    "Log Execution": {
       "main": [
         [
           {
@@ -537,14 +620,14 @@
       "main": [
         [
           {
-            "node": "Critic Review (LLM)",
+            "node": "Critic Review LLM",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Critic Review (LLM)": {
+    "Critic Review LLM": {
       "main": [
         [
           {
@@ -556,17 +639,6 @@
       ]
     },
     "Parse Critic": {
-      "main": [
-        [
-          {
-            "node": "Track Critic Tokens",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Track Critic Tokens": {
       "main": [
         [
           {
@@ -610,7 +682,7 @@
       "main": [
         [
           {
-            "node": "Update Metrics (Approved)",
+            "node": "Update Metrics",
             "type": "main",
             "index": 0
           }
@@ -650,7 +722,7 @@
       "main": [
         [
           {
-            "node": "Update Metrics (Revisions)",
+            "node": "Update Metrics 2",
             "type": "main",
             "index": 0
           }
@@ -661,12 +733,16 @@
   "active": true,
   "settings": {
     "executionOrder": "v1",
-    "errorWorkflow": "",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "8EZOzDYTd9D7vKWE",
     "callerPolicy": "workflowsFromSameOwner"
   },
-  "versionId": "0c27f3f9-e024-4c78-a6f2-b89f8b5c3d2e",
+  "versionId": "dfa97323-bc9d-4be8-b1bb-9c319e7ee2c4",
   "meta": {
-    "templateCredsSetupCompleted": true
+    "instanceId": "37df2b5edb3bba3db0121f21a287ff0fbc638f8b4b35c6840548e4d41c57dce5"
   },
-  "pinData": {}
+  "id": "rHL7j62y4G0VVARK",
+  "tags": []
 }

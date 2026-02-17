@@ -3,195 +3,229 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "7f8a1b2c-3d4e-5f6a-7b8c-9d0e1f2a3b4c",
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000001",
       "name": "Execute Workflow Trigger",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [250, 100]
+      "position": [0, 0]
     },
     {
       "parameters": {
         "filePath": "/home/node/.n8n-files/TODO-by-Mike.yml"
       },
-      "id": "8g9b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000002",
       "name": "Read YAML",
       "type": "n8n-nodes-base.readBinaryFile",
       "typeVersion": 1,
-      "position": [250, 250]
+      "position": [250, 0]
     },
     {
       "parameters": {
-        "jsCode": "const yaml = require('js-yaml');\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst content = buffer.toString('utf8');\nconst parsed = yaml.load(content);\n\nif (!parsed || !parsed.topics || parsed.topics.length === 0) {\n  return [{ json: { topics: [], empty: true } }];\n}\n\nreturn [{ json: { topics: parsed.topics, empty: false } }];"
+        "jsCode": "const yaml = require('js-yaml');\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst content = buffer.toString('utf8');\nconst parsed = yaml.load(content);\n\nif (!parsed || !parsed.topics || parsed.topics.length === 0) {\n  return [{ json: { empty: true, topics: [] } }];\n}\nreturn [{ json: { empty: false, topics: parsed.topics } }];"
       },
-      "id": "9h0c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e",
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000003",
       "name": "Parse YAML",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [250, 400]
+      "position": [500, 0]
     },
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "conditions": [
             {
-              "value1": "={{ $json.empty }}",
-              "value2": false,
-              "operation": "equals"
+              "leftValue": "={{ $json.empty }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
             }
           ]
-        }
+        },
+        "options": {}
       },
-      "id": "0i1d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f",
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000004",
       "name": "If Topics Exist",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [250, 550]
+      "position": [750, 0]
     },
     {
       "parameters": {
-        "postgresCredential": {
-          "id": "e5OQkBV17S58WLzA",
-          "name": "johnny-postgres"
-        },
-        "query": "SELECT value->>'index' as wrr_index FROM workflow_state WHERE key = 'wrr_index';"
+        "operation": "executeQuery",
+        "query": "SELECT value->>'index' as wrr_index FROM workflow_state WHERE key = 'wrr_index';",
+        "options": {}
       },
-      "id": "1j2e5f6a-7b8c-9d0e-1f2a-3b4c5d6e7f8g",
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000005",
       "name": "Get WRR Index",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
-      "position": [550, 400]
-    },
-    {
-      "parameters": {
-        "jsCode": "const pattern = [1,1,1,1,1, 2,2,2,2, 3,3,3, 4,4, 5];\nconst topics = $('Parse YAML').first().json.topics;\nconst currentIndex = parseInt($json.wrr_index || '0');\n\nconst targetPriority = pattern[currentIndex % pattern.length];\nconst nextIndex = (currentIndex + 1) % pattern.length;\n\nlet selected = topics.find(t => t.priority === targetPriority && (t.maxcount === undefined || t.maxcount > 0));\n\nif (!selected) {\n  const available = topics\n    .filter(t => t.maxcount === undefined || t.maxcount > 0)\n    .sort((a, b) => a.priority - b.priority);\n  selected = available[0] || null;\n}\n\nif (!selected) {\n  return [{ json: { no_topic: true, nextIndex: nextIndex } }];\n}\n\nreturn [{\n  json: {\n    topic_id: selected.id,\n    topic_description: selected.description,\n    topic_priority: selected.priority,\n    max_tasks: selected.max_tasks_per_cycle || 5,\n    nextIndex: nextIndex,\n    no_topic: false\n  }\n}];"
-      },
-      "id": "2k3f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8g9h",
-      "name": "Weighted Round Robin Selection",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [550, 550]
-    },
-    {
-      "parameters": {
-        "postgresCredential": {
+      "position": [1000, -100],
+      "credentials": {
+        "postgres": {
           "id": "e5OQkBV17S58WLzA",
           "name": "johnny-postgres"
-        },
-        "query": "UPDATE workflow_state SET value = jsonb_set(value, '{index}', to_jsonb($1::int)), updated_at = NOW() WHERE key = 'wrr_index';",
-        "queryReplacement": "={{ $json.nextIndex }}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pattern = [1,1,1,1,1, 2,2,2,2, 3,3,3, 4,4, 5];\nconst topics = $('Parse YAML').first().json.topics;\nconst currentIndex = parseInt($json.wrr_index || '0');\nconst targetPriority = pattern[currentIndex % pattern.length];\nconst nextIndex = (currentIndex + 1) % pattern.length;\n\nlet selected = topics.find(t => t.priority === targetPriority && (t.maxcount === undefined || t.maxcount > 0));\nif (!selected) {\n  const available = topics.filter(t => t.maxcount === undefined || t.maxcount > 0).sort((a, b) => a.priority - b.priority);\n  selected = available[0] || null;\n}\n\nif (!selected) {\n  return [{ json: { no_topic: true, nextIndex: nextIndex } }];\n}\n\nreturn [{ json: { topic_id: selected.id, topic_description: selected.description, topic_priority: selected.priority, max_tasks: selected.max_tasks_per_cycle || 5, nextIndex: nextIndex, no_topic: false } }];"
       },
-      "id": "3l4g7b8c-9d0e-1f2a-3b4c-5d6e7f8g9h0i",
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000006",
+      "name": "WRR Selection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, -100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE workflow_state SET value = jsonb_set(value, '{index}', to_jsonb($1::int)), updated_at = NOW() WHERE key = 'wrr_index';",
+        "options": {
+          "queryReplacement": "={{ $json.nextIndex }}"
+        }
+      },
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000007",
       "name": "Update WRR Index",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
-      "position": [550, 700]
+      "position": [1500, -100],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     },
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "conditions": [
             {
-              "value1": "={{ $json.no_topic }}",
-              "value2": false,
-              "operation": "equals"
+              "leftValue": "={{ $json.no_topic }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
             }
           ]
-        }
+        },
+        "options": {}
       },
-      "id": "4m5h8c9d-0e1f-2a3b-4c5d-6e7f8g9h0i1j",
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000008",
       "name": "If Topic Selected",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [550, 850]
+      "position": [1750, -100]
     },
     {
       "parameters": {
-        "postgresCredential": {
-          "id": "e5OQkBV17S58WLzA",
-          "name": "johnny-postgres"
-        },
-        "query": "INSERT INTO topics (id, project_id, priority, weight, maxcount, description, remaining_count)\nVALUES ($1, (SELECT id FROM projects WHERE name='Johnny Bright'), $2, 1, $3, $4, $3)\nON CONFLICT (id) DO UPDATE SET\n  priority = EXCLUDED.priority,\n  description = EXCLUDED.description,\n  last_served_at = NOW();",
-        "queryReplacement": "={{ [$json.topic_id, $json.topic_priority, $json.max_tasks, $json.topic_description] }}"
+        "operation": "executeQuery",
+        "query": "INSERT INTO topics (id, project_id, priority, weight, maxcount, description, remaining_count) VALUES ($1, (SELECT id FROM projects WHERE name='Johnny Bright'), $2, 1, $3, $4, $3) ON CONFLICT (id) DO UPDATE SET priority = EXCLUDED.priority, description = EXCLUDED.description, last_served_at = NOW();",
+        "options": {
+          "queryReplacement": "={{ [$json.topic_id, $json.topic_priority, $json.max_tasks, $json.topic_description] }}"
+        }
       },
-      "id": "5n6i9d0e-1f2a-3b4c-5d6e-7f8g9h0i1j2k",
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000009",
       "name": "Sync Topic to DB",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
-      "position": [850, 700]
-    },
-    {
-      "parameters": {
-        "url": "http://host.docker.internal:8000/v1/chat/completions",
-        "method": "POST",
-        "bodyParametersJson": "{\n  \"model\": \"default\",\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a task decomposition engine. Given a topic, generate exactly 5 specific, actionable tasks. Return ONLY a JSON array of objects with keys: description (string), impact (0-100), urgency (0-100), complexity (0-100). No additional text.\"},\n    {\"role\": \"user\", \"content\": \"Topic: {{ $json.topic_description }}\\n\\nGenerate 5 tasks for this topic.\"}\n  ],\n  \"temperature\": 0.4,\n  \"max_tokens\": 1500\n}"
-      },
-      "id": "6o7j0e1f-2a3b-4c5d-6e7f-8g9h0i1j2k3l",
-      "name": "Generate Tasks (LLM)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [850, 850]
-    },
-    {
-      "parameters": {
-        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nconst topicData = $('Weighted Round Robin Selection').first().json;\n\nlet tasks;\ntry {\n  const jsonMatch = raw.match(/\\[\\s\\S]*\\]/);\n  tasks = JSON.parse(jsonMatch ? jsonMatch[0] : raw);\n} catch (e) {\n  throw new Error('LLM did not return valid JSON array: ' + raw.substring(0, 200));\n}\n\nif (!Array.isArray(tasks)) {\n  tasks = tasks.tasks || [tasks];\n}\n\nreturn tasks.slice(0, 5).map(t => ({\n  json: {\n    description: t.description || String(t),\n    impact: t.impact || 50,\n    urgency: t.urgency || 50,\n    complexity: t.complexity || 50,\n    topic_id: topicData.topic_id,\n    source: 'workspace'\n  }\n}));"
-      },
-      "id": "7p8k1f2a-3b4c-5d6e-7f8g-9h0i1j2k3l4m",
-      "name": "Parse Generated Tasks",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [850, 1000]
-    },
-    {
-      "parameters": {
-        "postgresCredential": {
+      "position": [2000, -200],
+      "credentials": {
+        "postgres": {
           "id": "e5OQkBV17S58WLzA",
           "name": "johnny-postgres"
-        },
-        "query": "INSERT INTO project_tasks (project_id, topic_id, description, impact_score, urgency_score, complexity_score, source, status)\nVALUES (\n  (SELECT id FROM projects WHERE name='Johnny Bright'),\n  $1, $2, $3, $4, $5, $6, 'pending'\n);",
-        "queryReplacement": "={{ [$json.topic_id, $json.description, $json.impact, $json.urgency, $json.complexity, $json.source] }}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/v1/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"default\",\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a task decomposition engine. Generate exactly 5 specific, actionable tasks. Return ONLY a JSON array of objects: [{\\\"description\\\": \\\"...\\\", \\\"impact\\\": 0-100, \\\"urgency\\\": 0-100, \\\"complexity\\\": 0-100}]. No extra text.\"},\n    {\"role\": \"user\", \"content\": \"Topic: {{ $json.topic_description }}\"}\n  ],\n  \"temperature\": 0.4,\n  \"max_tokens\": 1500\n}",
+        "options": {}
       },
-      "id": "8q9l2a3b-4c5d-6e7f-8g9h-0i1j2k3l4m5n",
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000010",
+      "name": "Generate Tasks LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2250, -200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nconst topicData = $('WRR Selection').first().json;\nlet tasks;\ntry {\n  const jsonMatch = raw.match(/\\[[\\s\\S]*\\]/);\n  tasks = JSON.parse(jsonMatch ? jsonMatch[0] : raw);\n} catch (e) {\n  throw new Error('LLM did not return valid JSON array: ' + raw.substring(0, 200));\n}\nif (!Array.isArray(tasks)) tasks = tasks.tasks || [tasks];\n\nreturn tasks.slice(0, 5).map(t => ({\n  json: {\n    description: t.description || String(t),\n    impact: t.impact || 50,\n    urgency: t.urgency || 50,\n    complexity: t.complexity || 50,\n    topic_id: topicData.topic_id,\n    source: 'workspace'\n  }\n}));"
+      },
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000011",
+      "name": "Parse Tasks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, -200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO project_tasks (project_id, topic_id, description, impact_score, urgency_score, complexity_score, source, status) VALUES ((SELECT id FROM projects WHERE name='Johnny Bright'), $1, $2, $3, $4, $5, $6, 'pending');",
+        "options": {
+          "queryReplacement": "={{ [$json.topic_id, $json.description, $json.impact, $json.urgency, $json.complexity, $json.source] }}"
+        }
+      },
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000012",
       "name": "Insert Tasks",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
-      "position": [850, 1150]
-    },
-    {
-      "parameters": {
-        "jsCode": "const yaml = require('js-yaml');\nconst fs = require('fs');\nconst filePath = '/home/node/.n8n-files/TODO-by-Mike.yml';\n\nconst content = fs.readFileSync(filePath, 'utf8');\nconst parsed = yaml.load(content);\nconst topicId = $('Weighted Round Robin Selection').first().json.topic_id;\n\nif (parsed && parsed.topics) {\n  parsed.topics = parsed.topics.map(t => {\n    if (t.id === topicId && t.maxcount !== undefined) {\n      t.maxcount = Math.max(0, t.maxcount - 1);\n    }\n    return t;\n  }).filter(t => t.maxcount === undefined || t.maxcount > 0);\n\n  fs.writeFileSync(filePath, yaml.dump(parsed, { lineWidth: -1 }), 'utf8');\n}\n\nreturn [{ json: { success: true, remaining_topics: (parsed.topics || []).length } }];"
-      },
-      "id": "9r0m3b4c-5d6e-7f8g-9h0i-1j2k3l4m5n6o",
-      "name": "Decrement YAML maxcount",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [850, 1300]
-    },
-    {
-      "parameters": {
-        "jsCode": "const modes = [\n  'Review recent task outputs for quality patterns and suggest process improvements',\n  'Analyze token usage patterns and suggest optimization strategies',\n  'Review the codebase architecture and suggest structural improvements',\n  'Identify recurring error patterns and propose preventive measures',\n  'Evaluate task decomposition quality and suggest better strategies'\n];\nconst selected = modes[Math.floor(Math.random() * modes.length)];\nreturn [{ json: { description: selected, source: 'system' } }];"
-      },
-      "id": "0s1n4c5d-6e7f-8g9h-0i1j-2k3l4m5n6o7p",
-      "name": "Idle Research Mode",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [250, 750]
-    },
-    {
-      "parameters": {
-        "postgresCredential": {
+      "position": [2750, -200],
+      "credentials": {
+        "postgres": {
           "id": "e5OQkBV17S58WLzA",
           "name": "johnny-postgres"
-        },
-        "query": "INSERT INTO project_tasks (project_id, description, impact_score, urgency_score, complexity_score, source, status)\nVALUES (\n  (SELECT id FROM projects WHERE name='Johnny Bright'),\n  $1, 30, 20, 40, 'system', 'pending'\n);",
-        "queryReplacement": "={{ $json.description }}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const yaml = require('js-yaml');\nconst fs = require('fs');\nconst filePath = '/home/node/.n8n-files/TODO-by-Mike.yml';\nconst content = fs.readFileSync(filePath, 'utf8');\nconst parsed = yaml.load(content);\nconst topicId = $('WRR Selection').first().json.topic_id;\n\nif (parsed && parsed.topics) {\n  parsed.topics = parsed.topics.map(t => {\n    if (t.id === topicId && t.maxcount !== undefined) {\n      t.maxcount = Math.max(0, t.maxcount - 1);\n    }\n    return t;\n  }).filter(t => t.maxcount === undefined || t.maxcount > 0);\n  fs.writeFileSync(filePath, yaml.dump(parsed, { lineWidth: -1 }), 'utf8');\n}\nreturn [{ json: { success: true } }];"
       },
-      "id": "1t2o5d6e-7f8g-9h0i-1j2k-3l4m5n6o7p8q",
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000013",
+      "name": "Decrement YAML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3000, -200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const modes = [\n  'Review recent task outputs for quality patterns and suggest process improvements',\n  'Analyze token usage and suggest optimization strategies',\n  'Review codebase architecture and suggest structural improvements',\n  'Identify recurring error patterns and propose preventive measures',\n  'Evaluate task decomposition quality and suggest better strategies'\n];\nreturn [{ json: { description: modes[Math.floor(Math.random() * modes.length)], source: 'system' } }];"
+      },
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000014",
+      "name": "Idle Research",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO project_tasks (project_id, description, impact_score, urgency_score, complexity_score, source, status) VALUES ((SELECT id FROM projects WHERE name='Johnny Bright'), $1, 30, 20, 40, 'system', 'pending');",
+        "options": {
+          "queryReplacement": "={{ $json.description }}"
+        }
+      },
+      "id": "a1b20001-aaaa-bbbb-cccc-000000000015",
       "name": "Insert Idle Task",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
-      "position": [250, 900]
+      "position": [1250, 200],
+      "credentials": {
+        "postgres": {
+          "id": "e5OQkBV17S58WLzA",
+          "name": "johnny-postgres"
+        }
+      }
     }
   ],
+  "pinData": {},
   "connections": {
     "Execute Workflow Trigger": {
       "main": [
@@ -237,7 +271,7 @@
         ],
         [
           {
-            "node": "Idle Research Mode",
+            "node": "Idle Research",
             "type": "main",
             "index": 0
           }
@@ -248,14 +282,14 @@
       "main": [
         [
           {
-            "node": "Weighted Round Robin Selection",
+            "node": "WRR Selection",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Weighted Round Robin Selection": {
+    "WRR Selection": {
       "main": [
         [
           {
@@ -288,7 +322,7 @@
         ],
         [
           {
-            "node": "Idle Research Mode",
+            "node": "Idle Research",
             "type": "main",
             "index": 0
           }
@@ -299,25 +333,25 @@
       "main": [
         [
           {
-            "node": "Generate Tasks (LLM)",
+            "node": "Generate Tasks LLM",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Generate Tasks (LLM)": {
+    "Generate Tasks LLM": {
       "main": [
         [
           {
-            "node": "Parse Generated Tasks",
+            "node": "Parse Tasks",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse Generated Tasks": {
+    "Parse Tasks": {
       "main": [
         [
           {
@@ -332,14 +366,14 @@
       "main": [
         [
           {
-            "node": "Decrement YAML maxcount",
+            "node": "Decrement YAML",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Idle Research Mode": {
+    "Idle Research": {
       "main": [
         [
           {
@@ -354,5 +388,8 @@
   "active": false,
   "settings": {
     "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
   }
 }
